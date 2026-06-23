@@ -1,23 +1,12 @@
-﻿using NAudio;
+﻿using NAudio.CoreAudioApi;
 using NAudio.Wave;
-using System.CodeDom;
-
-public class AudioDeviceManager
-{
-    public List<string> getAudioDevices()
-    {
-        var devices = new List<string>();
-        for (int i = 0; i< WaveOut.DeviceCount; i++)
-        {
-            var deviceInfo = WaveOut.GetCapabilities(i);
-            devices.Add($"{i} : {deviceInfo.ProductName}");
-        }
-
-        return devices;
-    }
+using System.Text.RegularExpressions;
 
 
-}
+//public class DeviceAudioPlayer
+//{
+    
+//}
 
 
 namespace WinFormsApp1
@@ -55,6 +44,8 @@ namespace WinFormsApp1
             label1 = new Label();
             comboBox1 = new ComboBox();
             comboBox2 = new ComboBox();
+            button3 = new Button();
+            button4 = new Button();
             SuspendLayout();
             // 
             // button1
@@ -94,6 +85,7 @@ namespace WinFormsApp1
             comboBox1.Name = "comboBox1";
             comboBox1.Size = new Size(776, 40);
             comboBox1.TabIndex = 5;
+            comboBox1.SelectedIndexChanged += comboBox1_SelectedIndexChanged;
             // 
             // comboBox2
             // 
@@ -102,6 +94,27 @@ namespace WinFormsApp1
             comboBox2.Name = "comboBox2";
             comboBox2.Size = new Size(776, 40);
             comboBox2.TabIndex = 6;
+            comboBox2.SelectedIndexChanged += comboBox2_SelectedIndexChanged;
+            // 
+            // button3
+            // 
+            button3.Location = new Point(111, 372);
+            button3.Name = "button3";
+            button3.Size = new Size(150, 46);
+            button3.TabIndex = 7;
+            button3.Text = "Play Audio";
+            button3.UseVisualStyleBackColor = true;
+            button3.Click += button3_Click;
+            // 
+            // button4
+            // 
+            button4.Location = new Point(518, 372);
+            button4.Name = "button4";
+            button4.Size = new Size(150, 46);
+            button4.TabIndex = 8;
+            button4.Text = "Stop Audio";
+            button4.UseVisualStyleBackColor = true;
+            button4.Click += button4_Click;
             // 
             // Form1
             // 
@@ -109,6 +122,8 @@ namespace WinFormsApp1
             AutoScaleDimensions = new SizeF(13F, 32F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(800, 450);
+            Controls.Add(button4);
+            Controls.Add(button3);
             Controls.Add(comboBox2);
             Controls.Add(comboBox1);
             Controls.Add(label1);
@@ -126,5 +141,70 @@ namespace WinFormsApp1
         private Label label1;
         private ComboBox comboBox1;
         private ComboBox comboBox2;
+        private Button button3;
+        private Button button4;
+
+        public List<string> getAudioDevices()
+        {
+            var devices = new List<string>();
+
+            for (int i = 0; i < WaveOut.DeviceCount; i++)
+            {
+                var deviceInfo = WaveOut.GetCapabilities(i);
+                var deviceID = deviceInfo.ProductGuid.ToString();
+                devices.Add($"{i} : {deviceInfo.ProductName}");
+
+            }
+
+            return devices;
+        }
+
+        public List<string> getAudioDeviceIds()
+        {
+            var deviceIds = new List<string>();
+            MMDeviceEnumerator enumerator = new MMDeviceEnumerator();
+
+            for (int i = 0; i < WaveOut.DeviceCount; i++)
+            {
+                MMDevice device = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active)[i];
+                deviceIds.Add(device.ID);
+            }
+
+            return deviceIds;
+
+        }
+
+        private BufferedWaveProvider bufferedWaveProvider;
+        private WasapiOut player;
+        private WasapiCapture recorder;
+
+        public void onRecordingStart(Object sender, EventArgs e)
+        {
+            recorder = new WasapiLoopbackCapture();
+            recorder.DataAvailable += RecorderOnDataAvailable;
+
+            bufferedWaveProvider = new BufferedWaveProvider(recorder.WaveFormat);
+
+            int index = comboBox2.SelectedIndex;
+            MMDeviceEnumerator enumerator = new MMDeviceEnumerator();
+            MMDevice targetDevice = enumerator.GetDevice(getAudioDeviceIds()[index]);
+
+            player = new WasapiOut(targetDevice, AudioClientShareMode.Shared, false, 50);
+            player.Init(bufferedWaveProvider);
+
+            player.Play();
+            recorder.StartRecording();
+        }
+
+        private void RecorderOnDataAvailable(Object sender, WaveInEventArgs waveInEventArgs)
+        {
+            bufferedWaveProvider.AddSamples(waveInEventArgs.Buffer, 0, waveInEventArgs.BytesRecorded);
+        }
+
+        public void onStopRecording(Object sender, EventArgs e)
+        {
+            recorder.StopRecording();
+            player.Stop();
+        }
     }
 }
