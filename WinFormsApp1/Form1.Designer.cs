@@ -226,8 +226,8 @@ namespace WinFormsApp1
 
         }
 
-        private BufferedWaveProvider bufferedWaveProvider;
-        private WasapiOut player;
+        private List<BufferedWaveProvider> buffers = new List<BufferedWaveProvider>();
+        private List<WasapiOut> players = new List<WasapiOut>();
         private WasapiCapture recorder;
 
         public void onRecordingStart(Object sender, EventArgs e)
@@ -235,35 +235,47 @@ namespace WinFormsApp1
             recorder = new WasapiLoopbackCapture();
             recorder.DataAvailable += RecorderOnDataAvailable;
 
-            MMDeviceEnumerator enumerator = new MMDeviceEnumerator();
-            MMDevice targetDevice = (MMDevice)comboBox2.SelectedItem;
-
-            var mixFormat = targetDevice.AudioClient.MixFormat;
-            bufferedWaveProvider = new BufferedWaveProvider(mixFormat);
-
-            Console.WriteLine(targetDevice.FriendlyName);
-            Console.WriteLine(targetDevice.AudioClient.MixFormat.SampleRate);
-            Console.WriteLine(targetDevice.AudioClient.MixFormat.Channels);
+            players.Clear();
+            buffers.Clear();
 
 
-            player = new WasapiOut(targetDevice, AudioClientShareMode.Shared, false, 50);
+            foreach(var comboBox in comboBoxes)
+            {
+                if(comboBox.SelectedItem == null) continue;
 
-            SilenceProvider sp = new SilenceProvider(mixFormat);
-            player.Init(sp);
+                MMDevice device = comboBox.SelectedItem as MMDevice;
+                var format = device.AudioClient.MixFormat;
+                var buffer = new BufferedWaveProvider(format);
+                var player = new WasapiOut(device, AudioClientShareMode.Shared, false, 50);
+                
+                player.Init(buffer);
+                player.Play();
+                buffers.Add(buffer);
+                players.Add(player);
 
-            player.Play();
+                Console.WriteLine($"Started playing audio on device: {device.FriendlyName}");
+
+            }
+            
             recorder.StartRecording();
         }
 
         private void RecorderOnDataAvailable(Object sender, WaveInEventArgs waveInEventArgs)
         {
-            bufferedWaveProvider.AddSamples(waveInEventArgs.Buffer, 0, waveInEventArgs.BytesRecorded);
+            foreach(var buffer in buffers)
+            {
+                buffer.AddSamples(waveInEventArgs.Buffer, 0, waveInEventArgs.BytesRecorded);
+            }
         }
 
         public void onStopRecording(Object sender, EventArgs e)
         {
             recorder.StopRecording();
-            player.Stop();
+            foreach(var player in players)
+            {
+                player.Stop();
+            }
+            players.Clear();
         }
 
         //End of NAudio related function declarations
